@@ -1,9 +1,9 @@
 defmodule PUSHSUMGOSSIPTest do
   use ExUnit.Case
-  doctest PUSHSUMGOSSIP
+  doctest GOSSIP
 
   test "greets the world" do
-    IO.inspect(PUSHSUMGOSSIP.start([1,2,3]), limit: :infinity)
+    IO.inspect(SUPERVISOR.start_link(10), limit: :infinity)
     #assert PUSHSUMGOSSIP.hello() == :world
   end
 end
