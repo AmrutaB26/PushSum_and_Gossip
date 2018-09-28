@@ -12,7 +12,7 @@ defmodule SSUPERVISOR do
     worker(GOSSIP, [x], [id: x, restart: :permanent])
   end)
   IO.puts "Children created"
-  IO.inspect Supervisor.init(children, strategy: :one_for_one)
+  Supervisor.init(children, strategy: :one_for_one)
 
   #node_lists <- call network function to create neighbour array
   #function to pick a random pid and update its state to the value

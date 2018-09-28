@@ -12,7 +12,7 @@ defmodule GOSSIP do
   end
   def handle_cast({:neighboursList,list}, state) do
     [count,blist,s,w]=state
-    state=[count,list,s,w]
+    state=[count,[list |blist],s,w]
     {:noreply, state}
   end
   def handle_call({:neighboursList}, _from, state) do
@@ -59,17 +59,53 @@ defmodule GOSSIP do
     Enum.each(1..numNodes, fn(x)->
       updateNeighbours(String.to_atom("Child_"<>Integer.to_string(x)), List.delete(list,"Child_"<>Integer.to_string(x))) end)
   end
-  def buildRand2DTopology(numNodes) do
-    list=Enum.map(1..numNodes, fn(x)-> x end)
-    list = Enum.shuffle(list)
-    IO.inspect list
-    sqroot = :math.sqrt(numNodes)
 
-    #neighbours = [neighbours | getNeighbours()]
+  def buildRand2DTopology(numNodes) do
+    map = Map.new()
+    #table = :ets.new(:buckets_registry, [:set, :protected])
+    map =Enum.reduce(1..numNodes,map, fn x,acc->
+      node = String.to_atom("Child_"<>Integer.to_string(x))
+      coordinates = {(Enum.random(0..1000*10)/10000),(Enum.random(0..1000*10)/10000)}
+      #:ets.insert(table,{node,coordinates})
+      Map.put(acc,node,coordinates)
+      #IO.inspect acc
+    end)
+    IO.inspect is_map(map)
+    get2DNeighbours(map)
+    #IO.inspect generateRandomNumbers(numNodes,[])
   end
 
-  defp getNeighbours() do
+  #TODO-----------------------------------------------------------------------
 
+  defp get2DNeighbours(list) do
+    Map.keys(list)
+    |> Enum.each(fn(x)->
+      {refx, refy} = Map.fetch!(list,x)
+      temp = Map.delete(list,x)
+      keys = Map.keys(temp)
+      Enum.each(keys, fn(y) ->
+        {coorx,coory} = Map.fetch!(temp,y)
+        if(:math.sqrt(:math.pow((refx-coorx),2) + :math.pow((refy-coory),2)) < 0.1) do
+          updateNeighbours(x, y)
+        end
+      end)
+
+      #IO.inspect refx
+    end)
+    #Enum.each(list, fn({k,a}) ->
+      #{refx, refy} = Map.fetch!(list,x)
+
+    #end)
+
+    #elements = Float.floor(0.1/(1/sqroot))
+  #  Enum.each(list, fn(k) ->
+   #   index=Enum.find_index(list, fn(x) -> x==k end)
+    #  IO.inspect index
+      #Enum.map(, fn(x) ->
+      #  neighbours = [neighbours | "Child_"<>Integer.to_string(Enum.fetch!(list,index+(sqroot*(x+1))))]
+      # updateNeighbours(String.to_atom("Child_"<>Integer.to_string(k)), neighbours)
+      #end)
+    #end)
   end
 end
 
