@@ -14,6 +14,7 @@ defmodule SSUPERVISOR do
   IO.puts "Children created"
   Supervisor.init(children, strategy: :one_for_one)
 
+  #GOSSIP.startGossip("gossip",1,self(),16)
   #node_lists <- call network function to create neighbour array
   #function to pick a random pid and update its state to the value
  end
