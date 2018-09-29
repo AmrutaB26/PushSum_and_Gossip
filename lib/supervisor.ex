@@ -9,14 +9,11 @@ defmodule SSUPERVISOR do
 
  def init(args) do #[numNodes,topology,algorithm,pid]
   children = Enum.map(1..hd(args), fn(x) ->
-    worker(GOSSIP, [x], [id: x, restart: :permanent])
+    worker(GOSSIP, [x], [id: x, restart: :temporary])
   end)
   IO.puts "Children created"
   Supervisor.init(children, strategy: :one_for_one)
-
-  #GOSSIP.startGossip("gossip",1,self(),16)
   #node_lists <- call network function to create neighbour array
   #function to pick a random pid and update its state to the value
  end
-
 end

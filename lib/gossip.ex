@@ -4,7 +4,7 @@ defmodule GOSSIP do
   ## ----------- Callback functions ------------- ##
 
   def start_link(num) do
-    GenServer.start_link(__MODULE__,[0,[],0,1], name: String.to_atom("Child_"<>Integer.to_string(num)))
+    GenServer.start_link(__MODULE__,[0,[],0,1,""], name: String.to_atom("Child_"<>Integer.to_string(num)))
   end
 
   def init(args) do
@@ -13,40 +13,28 @@ defmodule GOSSIP do
   end
 
   def handle_cast({:neighboursList,list}, state) do
-    [count,blist,s,w]=state
-    state=[count,[list |blist],s,w]
+    [count,blist,s,w,message]=state
+    state=[count,list++blist,s,w,message]
     {:noreply, state}
   end
 
-  def handle_call({:updateStateCount,msg,startTime,parent,numNodes}, _from, state) do
-    [count,blist,s,w,message]=state
-    state=[count+1,blist,s,w,message]
-    neighpid=String.to_atom(getRandomAliveNeighbour(blist))
-    Task.start(recursiveGossip(neighpid,msg,startTime,parent,numNodes))
-    {:reply,Enum.at(state,4), state}
+  def handle_cast({:updateStateCount,msg}, state) do
+    [count,blist,s,w,_]=state
+    state=[count+1,blist,s,w,msg]
+    IO.puts("count #{inspect state}")
+    {:noreply, state}
   end
 
-  def handle_call({:terminate,msg,pid,parent,numNodes,startTime}, _from, state) do
-    if(Enum.at(state,0)>10) do
-      :ets.update_counter(:table,"killedProcess",{2,1})
-      Process.exit(pid,:kill)
-      [{_,count}]=:ets.lookup(:table,"killedProcess")
-      if(count>=numNodes) do
-        endTime=System.monotonic_time(:millisecond)
-        IO.puts("Convergence reached at #{inspect (endTime-startTime) }")
-        Process.exit(parent,:kill)
-      end
-    else
-      recursiveGossip(pid,msg,startTime,parent,numNodes)
-    end
+  def getState(pid) do
+    GenServer.call(pid,{:getState})
   end
-
   def handle_call({:neighboursList}, _from, state) do
     {:reply,state, state}
   end
-
+  def handle_call({:getState},_from,state) do
+    {:reply,state,state}
+  end
   ## --------------- CLient API ---------------- ##
-
   def updateNeighbours(id,list) do
     GenServer.cast(id,{:neighboursList, list})
   end
@@ -55,24 +43,64 @@ defmodule GOSSIP do
     IO.inspect GenServer.call(id,{:neighboursList})
   end
 
-  def getRandomAliveNeighbour(list) do
-    neighbourNode=Enum.random(list)
-    if(!Process.alive?(neighbourNode)) do
-      getRandomAliveNeighbour(List.delete(list,neighbourNode))
-    else
-      neighbourNode
-    end
-  end
-
   def startGossip(msg,startTime,parent,numNodes) do
-    pid=String.to_atom("Child_"<>Integer.to_string(Enum.random(numNodes)))
-    IO.inspect pid
-    Task.start recursiveGossip(pid,msg,startTime,parent,numNodes)
+    pname=String.to_atom("Child_"<>Integer.to_string(Enum.random(1..numNodes)))
+    IO.puts("Starting Gossip #{inspect pname}")
+    #GenServer.call(pname,{:updateStateCount,msg,startTime,parent,numNodes})
+    recursiveGossip(pname,msg,startTime,parent,numNodes)    #child 6
   end
 
   def recursiveGossip(pid,msg,startTime,parent,numNodes) do
-    GenServer.call(pid,{:updateStateCount,msg,startTime,parent,numNodes})
-    GenServer.call(pid,{:terminate,msg,pid,parent,numNodes,startTime})
+    IO.puts("Recursion started Gossip #{inspect pid}")
+    GenServer.cast(pid,{:updateStateCount,msg})
+    IO.puts("Updated state #{inspect GenServer.call(pid,{:getState})}")
+    IO.puts("terminate started Gossip #{inspect pid}")
+    recursion(msg,pid,parent,numNodes,startTime)
+  end
+
+  def recursion(msg,pid,parent,numNodes,startTime) do
+    IO.puts ("hey #{inspect pid}")
+    state = getState(pid)
+    if(Enum.at(state,0)>10) do
+      IO.puts "hey11"
+      :ets.update_counter(:table,"killedProcess",{2,1})
+      Process.exit(Process.whereis(pid),:kill)
+      [{_,count}]=:ets.lookup(:table,"killedProcess")
+      IO.puts " table count"
+      IO.inspect count
+      if(count>=numNodes) do
+        IO.puts "dont come here"
+        endTime=System.monotonic_time(:millisecond)
+        IO.puts("Convergence reached at #{inspect (endTime-startTime) }")
+        Process.exit(parent,:kill)
+      end
+    else
+      IO.puts "hey22"
+      neighpid=getRandomAliveNeighbour(Enum.at(state,1))
+      IO.puts "hey33"
+      if(neighpid != :false) do
+        IO.puts "hey44"
+        Task.async(recursiveGossip(neighpid,msg,startTime,parent,numNodes))
+        recursion(msg,pid,parent,numNodes,startTime)
+      end
+    end
+  end
+
+  def getRandomAliveNeighbour(list) do
+    if(Enum.empty?(list)) do
+      IO.puts "reacheddd fallsee"
+      :false
+    else
+      neighbourNode=Enum.random(list)
+      IO.puts "amr"
+      IO.inspect neighbourNode
+      pid = Process.whereis(String.to_atom(neighbourNode))
+      if(pid == nil) do
+        getRandomAliveNeighbour(List.delete(list,neighbourNode))
+      else
+        String.to_atom(neighbourNode)
+      end
+    end
   end
 
   # ------------------------------- Topologies -------------------------------------- #
@@ -84,10 +112,12 @@ defmodule GOSSIP do
       "rand2D" -> buildRand2DTopology(numNodes)
       "torus" -> buildTorusTopology(numNodes)
       "line" -> buildLineTopology(numNodes)
-    #  "imp2D" -> buildimp2DTopology(numNodes)
+      "imp2D" -> buildImp2DTopology(numNodes)
       _ -> IO.puts "Invalid value of topology"
     end
     Enum.map(1..numNodes, fn(x) -> getNeighbours(String.to_atom("Child_"<>Integer.to_string(x))) end)
+    table = :ets.new(:table, [:named_table,:public])
+    :ets.insert(table,{"killedProcess",0})
   end
 
   def buildTorusTopology(numNodes) do
@@ -95,10 +125,11 @@ defmodule GOSSIP do
     Enum.map(1..numNodes, fn x->
       rightNode = "Child_" <> Integer.to_string(round(rem(x,sqroot) + (sqroot * Float.ceil((x/sqroot)-1)) + 1))
       topNode = "Child_"<> Integer.to_string(round(numNodes + rem(x-1,sqroot) +1 - (sqroot * (Float.ceil(x/sqroot)))))
-      #IO.puts("#{inspect x}, #{inspect topNode}")
+      IO.puts("#{inspect x}, #{inspect topNode}")
       updateNeighbours(String.to_atom("Child_"<>Integer.to_string(x)), [rightNode , topNode])
     end)
   end
+
   def buildLineTopology(numNodes) do
     Enum.each(1..numNodes, fn(x) ->
       neighbour = cond do
@@ -130,7 +161,21 @@ defmodule GOSSIP do
     get2DNeighbours(map)
   end
 
-  defp get2DNeighbours(list) do
+  def buildImp2DTopology(numNodes) do
+    Enum.each(1..numNodes, fn(x) ->
+      neighbour = cond do
+        x==1 ->
+          ["Child_"<>Integer.to_string(x+1),"Child_"<>Integer.to_string(Enum.random(1..numNodes))]
+        x==numNodes ->
+          ["Child_"<>Integer.to_string(x-1),"Child_"<>Integer.to_string(Enum.random(1..numNodes))]
+        true->
+          [("Child_"<>Integer.to_string(x-1)) , ("Child_"<>Integer.to_string(x+1)),"Child_"<>Integer.to_string(Enum.random(1..numNodes))]
+        end
+        updateNeighbours(String.to_atom("Child_"<>Integer.to_string(x)), neighbour)
+    end)
+  end
+
+  defp get2DNeighbours(list) do #TODO list of empty neighbours
     Map.keys(list)
     |> Enum.each(fn(x)->
       {refx, refy} = Map.fetch!(list,x)
@@ -139,7 +184,7 @@ defmodule GOSSIP do
       Enum.each(keys, fn(y) ->
         {coorx,coory} = Map.fetch!(temp,y)
         if(:math.sqrt(:math.pow((refx-coorx),2) + :math.pow((refy-coory),2)) < 0.1) do
-          updateNeighbours(x, y)
+          updateNeighbours(x, [Atom.to_string(y)])
         end
       end)
     end)
