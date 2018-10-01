@@ -34,18 +34,17 @@ defmodule SERVER do
     {:reply,state,state}
   end
 
-  def handle_call({:terminate,startTime,tcount,numNodes,prevstate},_from,state) do
+  def handle_call({:terminate,startTime,tcount,numNodes,prevstate},_from,_) do
     endTime = System.monotonic_time(:millisecond)
     time = endTime-startTime
     IO.puts("Convergence reached at #{inspect time}ms")
-    #IO.inspect(:ets.lookup(:table,"ProcessList"), limit: :infinity)
     :ets.insert(:table,{"killedProcess",0})
     :ets.insert(:table,{"ProcessList",[]})
-    Enum.map(1..numNodes, fn(x) ->
-      pname = (String.to_atom("Child_"<>Integer.to_string(x)))
-      state = getState(pname)
+    #Enum.map(1..numNodes, fn(x) ->
+      #pname = (String.to_atom("Child_"<>Integer.to_string(x)))
+      #state = getState(pname)
       #IO.puts("#{inspect Enum.at(state,0)} #{inspect (Enum.at(state,2)/Enum.at(state,3))}") # pname
-    end)
+    #end)
       IO.puts("Nodes converged: #{inspect tcount}")
       IO.puts("Total nodes: #{inspect numNodes}")
       IO.puts("Convergence ratio #{inspect (Enum.at(prevstate,2)/Enum.at(prevstate,3))}")
@@ -73,7 +72,7 @@ defmodule SERVER do
       :ets.update_counter(:table,"killedProcess",{2,1})
     end
     [{_,tcount}]=:ets.lookup(:table,"killedProcess")
-    if(tcount >= trunc(numNodes*0.9)) do
+    if(tcount >= trunc(numNodes*1)) do
       GenServer.call(:Child_0,{:terminate,startTime,tcount,numNodes,state})
     end
   end
@@ -127,6 +126,7 @@ defmodule SERVER do
   # ------------------------------- PUSH SUM -------------------------------------- #
 
   def startPushSum(numNodes,startTime) do
+    IO.puts "Push-sum started for #{numNodes} nodes"
     Enum.map(1..numNodes, fn(x)->
       pname = String.to_atom("Child_"<>Integer.to_string(x))
       propogatePushSum(pname,0,0,numNodes,startTime)

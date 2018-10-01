@@ -10,7 +10,7 @@ defmodule TOPOLOGIES do
         "imp2D" -> buildImp2DTopology(numNodes)
         _ -> IO.puts "Invalid value of topology"
       end
-      #Enum.map(1..numNodes, fn(x) -> SERVER.getNeighbours(String.to_atom("Child_"<>Integer.to_string(x))) end)
+      #IO.inspect Enum.map(1..numNodes, fn(x) -> SERVER.getNeighbours(String.to_atom("Child_"<>Integer.to_string(x))) end)
       table = :ets.new(:table, [:named_table,:public])
       :ets.insert(table,{"killedProcess",0})
       :ets.insert(table,{"ProcessList",[]})
@@ -20,7 +20,7 @@ defmodule TOPOLOGIES do
     # ------------------------------ Torus ------------------------------ #
 
     def buildTorusTopology(numNodes) do
-      sqroot = round(:math.sqrt(numNodes)) #handle for non squarable
+      sqroot = round(Float.floor(:math.sqrt(numNodes))) #handle for non squarable
       Enum.map(1..numNodes, fn x->
         #rightNode = "Child_" <> Integer.to_string(round(rem(x,sqroot) + (sqroot * Float.ceil((x/sqroot)-1)) + 1))
         #topNode = "Child_"<> Integer.to_string(round(numNodes + rem(x-1,sqroot) +1 - (sqroot * (Float.ceil(x/sqroot)))))
@@ -84,7 +84,7 @@ defmodule TOPOLOGIES do
       # ------------------------------ 3D ------------------------------ #
 
     def build3DTopology(numNodes) do
-      cubeRoot = round(:math.pow(numNodes,(1/3)))
+      cubeRoot = round(Float.floor(:math.pow(numNodes,(1/3))))
       Enum.each(1..numNodes, fn x->
         posX = if(x+1 <= numNodes && rem(x,cubeRoot) != 0 ) do x+1 end
         posY = if(rem(x,cubeRoot*cubeRoot) != 0 && cubeRoot*cubeRoot - cubeRoot >= rem(x,(cubeRoot*cubeRoot))) do x+ cubeRoot end
