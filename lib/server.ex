@@ -45,6 +45,7 @@ defmodule SERVER do
 
   def startGossip(msg,startTime,parent,numNodes) do
     pname=String.to_atom("Child_"<>Integer.to_string(Enum.random(1..numNodes)))
+    IO.puts("Gossip started with #{inspect pname}")
     initiateGossip(pname,msg,startTime,parent,numNodes)    #child 6
   end
 
@@ -55,26 +56,34 @@ defmodule SERVER do
   end
   def stopExecution(numNodes,startTime,state,pid) do
     [{_,list}]=:ets.lookup(:table,"ProcessList")
-    if(Enum.any?(list,fn x-> x==pid end) != :false) do
-      :ets.update_counter(:table,"killedProcess",{2,1})
-    else
+    if(Enum.any?(list,fn x-> x==pid end) == :false) do
       :ets.insert(:table,{"ProcessList",[pid]++list})
+      :ets.update_counter(:table,"killedProcess",{2,1})
     end
     [{_,tcount}]=:ets.lookup(:table,"killedProcess")
       if(tcount >= trunc(numNodes*0.9)) do
         #IO.puts(" killing process counter#{inspect tcount} #{inspect state}  #{inspect numNodes} ")
-        endTime = System.monotonic_time(:millisecond)
-        time = endTime-startTime
-        Enum.map(1..numNodes, fn(x) -> 
-          pname = (String.to_atom("Child_"<>Integer.to_string(x)))
-          state = getState(pname)
-          IO.puts("#{inspect Enum.at(state,0)} #{inspect (Enum.at(state,2)/Enum.at(state,3))}") # 
-        end)
-        IO.puts("Convergence reached at #{inspect time} #{inspect tcount}")
-        System.halt(1)
-      end
-  end
+        GenServer.call(:Child_0,{:terminate,startTime,tcount,numNodes})
+        end
 
+  end
+def handle_call({:terminate,startTime,tcount,numNodes},_from,state) do
+  endTime = System.monotonic_time(:millisecond)
+  time = endTime-startTime
+  #IO.puts("Convergence reached at #{inspect time} #{inspect tcount} #{inspect state}")
+  IO.puts("Convergence reached at #{inspect time} #{inspect tcount} #{inspect state}")
+  #IO.inspect(:ets.lookup(:table,"ProcessList"), limit: :infinity)
+
+  :ets.insert(:table,{"killedProcess",0})
+  :ets.insert(:table,{"ProcessList",[]})
+  Enum.map(1..numNodes, fn(x) ->
+    pname = (String.to_atom("Child_"<>Integer.to_string(x)))
+    state = getState(pname)
+    IO.puts("#{inspect Enum.at(state,0)} #{inspect (Enum.at(state,2)/Enum.at(state,3))}") # pname
+  end)
+
+  System.halt(1)
+end
   def spawnNeighbours(msg,pid,parent,numNodes,startTime) do
     state=getState(pid)
     if(Enum.at(state,0)>=10) do
@@ -82,14 +91,14 @@ defmodule SERVER do
     else
       neighNode=getRandomAliveNeighbour((Enum.at(state,1)))
       if(neighNode != :false) do
-        #IO.puts("From #{inspect pid} to #{inspect neighNode}")
-        ppid= spawn fn -> initiateGossip(neighNode,msg,startTime,parent,numNodes) end
-        #IO.inspect ppid
-        spawnNeighbours(msg,pid,parent,numNodes,startTime)
+        IO.puts("From #{inspect pid} to #{inspect neighNode}")
+        spawn fn -> initiateGossip(neighNode,msg,startTime,parent,numNodes) end
+        #spawnNeighbours(msg,pid,parent,numNodes,startTime)
       else
         stopExecution(numNodes,startTime,state,pid)
       end
     end
+     # spawnNeighbours(msg,pid,parent,numNodes,startTime)
   end
 
   def getRandomAliveNeighbour(list) do
@@ -111,12 +120,10 @@ defmodule SERVER do
 
   # ------------------------------- Topologies -------------------------------------- #
 
-  
   def startPushSum(numNodes,startTime) do
-    Enum.map(1..numNodes, fn(x)-> 
+    Enum.map(1..numNodes, fn(x)->
       pname = String.to_atom("Child_"<>Integer.to_string(x))
       propogatePushSum(pname,0,0,numNodes,startTime)
-      #Process.sleep(100)
     end)
   end
 
@@ -125,48 +132,68 @@ defmodule SERVER do
     oldS=Enum.at(state,2)
     oldW=Enum.at(state,3)
     count=Enum.at(state,0)
-    newS = (s+oldS)/2
-    newW = (w+oldW)/2
-    
-    diff=(newS/newW) - (oldS/oldW)
-    ncount = calculateCounter(diff,numNodes,count,startTime,state,pname)
-      
-      GenServer.cast(pname,{:updatePushSum,newS,newW,ncount})
-      neighNode = getRandomAliveNeighbour(Enum.at(state,1))
+    newS = (s+oldS)
+    newW = (w+oldW)
+
+    diff = abs((newS/newW) - (oldS/oldW))
+    neighNode = getNeighboursPush(Enum.at(state,1))
+
+    if(count != -1) do
+      ncount = calculateCounter(diff,numNodes,count,startTime,state,pname)
+      GenServer.cast(pname,{:updatePushSum,newS/2,newW/2,ncount})
+    end
       if(neighNode != :false) do
+        val1 = if(count != -1) do newS/2 else oldS/2 end
+        val2 = if(count != -1) do newW/2 else oldW/2 end
         #IO.puts("From #{inspect pname} to #{inspect neighNode}")
-        spawn fn -> propogatePushSum(neighNode,newS, newW, numNodes, startTime) end
+        spawn fn -> propogatePushSum(neighNode,val1,val2, numNodes, startTime) end
         Process.sleep(100)
-        #propogatePushSum(pname,newS,newW,numNodes,startTime)
       else
-        #IO.puts("killing process #{inspect pname} #{inspect state}")
         stopExecution(numNodes,startTime,state,pname)
       end
-      
   end
-  
+
+  def getNeighbourList(numNodes,pname) do
+    list = Enum.map(1..numNodes, fn x->
+      "Child_"<>Integer.to_string(x)
+    end)
+    list = List.delete(list,Atom.to_string(pname))
+    list
+  end
+
   def calculateCounter(diff,numNodes,count,startTime,state,pname) do
     if(diff < :math.pow(10,-10) && (count==2)) do
       #:ets.update_counter(:table,"killedProcess",{2,1})
       stopExecution(numNodes,startTime,state,pname)
-      ncount = 10
-    else 
+      -1
+    else
       if(diff >= :math.pow(10,-10)) do
-        ncount=0
+        0
       else
-        ncount = count+1
+        count+1
       end
     end
   end
 
-  
+  def getNeighboursPush(list) do
+    if(Enum.empty?(list)) do
+      :false
+    else
+      neigh = String.to_atom(Enum.random(list))
+      st = getState(neigh)
+      if(Enum.at(st,0)==-1) do
+        getNeighboursPush(List.delete(list,Atom.to_string(neigh)))
+      else
+        neigh
+      end
+    end
+  end
+
+
 
   def handle_cast({:updatePushSum,newS,newW,count},state) do
     [_,blist,_,_,msg]=state
     state=[count,blist,newS,newW,msg]
-    [{_,tcount}]=:ets.lookup(:table,"killedProcess")
-    #IO.puts("updated state #{inspect Enum.at(state,2)} #{inspect Enum.at(state,3)} #{inspect tcount}}")
     {:noreply, state}
   end
 end
-

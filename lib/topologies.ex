@@ -14,10 +14,11 @@ defmodule TOPOLOGIES do
       table = :ets.new(:table, [:named_table,:public])
       :ets.insert(table,{"killedProcess",0})
       :ets.insert(table,{"ProcessList",[]})
+      SERVER.start_link(0)
     end
-  
+
     # ------------------------------ Torus ------------------------------ #
-  
+
     def buildTorusTopology(numNodes) do
       sqroot = round(:math.sqrt(numNodes)) #handle for non squarable
       Enum.map(1..numNodes, fn x->
@@ -39,9 +40,9 @@ defmodule TOPOLOGIES do
         SERVER.updateNeighbours(String.to_atom("Child_"<>Integer.to_string(x)),list)
       end)
     end
-  
+
       # ------------------------------ Line ------------------------------ #
-  
+
     def buildLineTopology(numNodes) do
       Enum.each(1..numNodes, fn(x) ->
         neighbour = cond do
@@ -55,17 +56,17 @@ defmodule TOPOLOGIES do
           SERVER.updateNeighbours(String.to_atom("Child_"<>Integer.to_string(x)), neighbour)
       end)
     end
-  
+
       # ------------------------------ Full ------------------------------ #
-  
+
     def buildFullTopology(numNodes) do
       list=Enum.map(1..numNodes, fn(x)-> "Child_"<>Integer.to_string(x) end)
       Enum.each(1..numNodes, fn(x)->
         SERVER.updateNeighbours(String.to_atom("Child_"<>Integer.to_string(x)), List.delete(list,"Child_"<>Integer.to_string(x))) end)
     end
-  
+
       # --------------------------- Imperfect 2D ------------------------------ #
-  
+
     def buildImp2DTopology(numNodes) do
       Enum.each(1..numNodes, fn(x) ->
         neighbour = cond do
@@ -79,9 +80,9 @@ defmodule TOPOLOGIES do
           SERVER.updateNeighbours(String.to_atom("Child_"<>Integer.to_string(x)), neighbour)
       end)
     end
-  
+
       # ------------------------------ 3D ------------------------------ #
-  
+
     def build3DTopology(numNodes) do
       cubeRoot = round(:math.pow(numNodes,(1/3)))
       Enum.each(1..numNodes, fn x->
@@ -100,9 +101,9 @@ defmodule TOPOLOGIES do
         SERVER.updateNeighbours(String.to_atom("Child_"<>Integer.to_string(x)), list)
       end)
     end
-  
+
     # --------------------------- Random 2D ----------------------------- #
-  
+
     def buildRand2DTopology(numNodes) do
       map = Map.new()
       map =Enum.reduce(1..numNodes,map, fn x,acc->
@@ -113,7 +114,7 @@ defmodule TOPOLOGIES do
       #IO.inspect is_map(map)
       get2DNeighbours(map)
     end
-  
+
     defp get2DNeighbours(list) do #TODO list of empty neighbours
       Map.keys(list)
       |> Enum.each(fn(x)->
