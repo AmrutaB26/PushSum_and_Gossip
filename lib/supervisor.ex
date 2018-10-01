@@ -9,7 +9,7 @@ defmodule SSUPERVISOR do
 
  def init(args) do #[numNodes,topology,algorithm,pid]
   children = Enum.map(1..hd(args), fn(x) ->
-    worker(GOSSIP, [x], [id: x, restart: :temporary])
+    worker(SERVER, [x], [id: x, restart: :temporary])
   end)
   IO.puts "Children created"
   Supervisor.init(children, strategy: :one_for_one)
