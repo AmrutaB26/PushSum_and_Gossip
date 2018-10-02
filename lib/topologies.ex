@@ -1,19 +1,32 @@
 defmodule TOPOLOGIES do
 
-    def buildTopology(newTopology,numNodes) do
+    def buildTopology(newTopology,numNodes,algorithm) do
+      table = :ets.new(:table, [:named_table,:public])
+      case algorithm do
+        "gossip" -> :ets.insert(table,{"Algorithm","gossip"})
+        "push-sum" -> :ets.insert(table,{"Algorithm","push-sum"})
+      end
       case newTopology do
         "full" -> buildFullTopology(numNodes)
+        :ets.insert(table,{"Topology","full"})
         "3D" -> build3DTopology(numNodes)
+        :ets.insert(table,{"Topology","3D"})
         "rand2D" -> buildRand2DTopology(numNodes)
+        :ets.insert(table,{"Topology","rand2D"})
         "torus" -> buildTorusTopology(numNodes)
+        :ets.insert(table,{"Topology","torus"})
         "line" -> buildLineTopology(numNodes)
+        :ets.insert(table,{"Topology","line"})
         "imp2D" -> buildImp2DTopology(numNodes)
+        :ets.insert(table,{"Topology","imp2D"})
+
         _ -> IO.puts "Invalid value of topology"
       end
       #IO.inspect Enum.map(1..numNodes, fn(x) -> SERVER.getNeighbours(String.to_atom("Child_"<>Integer.to_string(x))) end)
-      table = :ets.new(:table, [:named_table,:public])
+
       :ets.insert(table,{"killedProcess",0})
       :ets.insert(table,{"ProcessList",[]})
+
       SERVER.start_link(0)
     end
 
@@ -107,9 +120,11 @@ defmodule TOPOLOGIES do
 
     def buildRand2DTopology(numNodes) do
       map = Map.new()
+      [{_,table1}]=:ets.lookup(:table,"Algorithm")
+      dividor = if(table1 == "gossip") do 100000 else 10000 end
       map =Enum.reduce(1..numNodes,map, fn x,acc->
         node = String.to_atom("Child_"<>Integer.to_string(x))
-        coordinates = {(Enum.random(0..1000*10)/10000),(Enum.random(0..1000*10)/10000)}
+        coordinates = {(Enum.random(0..1000*10)/dividor),(Enum.random(0..1000*10)/dividor)}
         Map.put(acc,node,coordinates)
       end)
       #IO.inspect is_map(map)

@@ -18,20 +18,25 @@ defmodule SERVER do
     {:noreply, state}
   end
 
-  def handle_cast({:updatePushSum,newS,newW,count},state) do
-    [_,blist,_,_,msg]=state
-    state=[count,blist,newS,newW,msg]
-    {:noreply, state}
-  end
-
   def handle_cast({:updateStateCount,msg}, state) do
     [count,blist,s,w,_]=state
     state=[count+1,blist,s,w,msg]
     {:noreply, state}
   end
 
-  def handle_call({:getState},_from,state) do
-    {:reply,state,state}
+  def handle_cast({:updatePushSum,newS,newW,count},state) do
+    [_,blist,_,_,msg]=state
+    state=[count,blist,newS,newW,msg]
+    {:noreply, state}
+  end
+
+  def handle_cast({:neigh,msg,startTime,numNodes},state) do
+    neighNode=getRandomAliveNeighbour((Enum.at(state,1)))
+    if(neighNode != :false) do
+      spawn fn -> GenServer.cast(neighNode,{:accept,msg,startTime,numNodes}) end
+      GenServer.cast(self(),{:neigh,msg,startTime,numNodes})
+    end
+      {:noreply,state}
   end
 
   def handle_cast({:accept,msg,numNodes,startTime},state) do
@@ -46,13 +51,15 @@ defmodule SERVER do
     {:noreply,[count+1,list,s,w,msg],state}
   end
 
-  def handle_cast({:neigh,msg,startTime,numNodes},state) do
-    neighNode=getRandomAliveNeighbour((Enum.at(state,1)))
-    if(neighNode != :false) do
-      spawn fn -> GenServer.cast(neighNode,{:accept,msg,startTime,numNodes}) end
-      GenServer.cast(self(),{:neigh,msg,startTime,numNodes})
-    end
-      {:noreply,state}
+  def handle_call({:getState},_from,state) do
+    {:reply,state,state}
+  end
+
+  def handle_call({:converge,startTime},_from,_) do
+    endTime = System.os_time(:millisecond)
+    time = endTime-startTime
+    IO.puts("Convergence reached at #{inspect time}ms")
+    System.halt(1)
   end
 
   def handle_call({:terminate,startTime,tcount,numNodes,prevstate},_from,_) do
@@ -68,23 +75,12 @@ defmodule SERVER do
     #end)
       IO.puts("Nodes converged: #{inspect tcount}")
       IO.puts("Total nodes: #{inspect numNodes}")
-      IO.puts("Convergence ratio #{inspect (Enum.at(prevstate,2)/Enum.at(prevstate,3))}")
-    System.halt(1)
-  end
-
-  def handle_call({:converge,startTime},_from,_) do
-    endTime = System.os_time(:millisecond)
-    time = endTime-startTime
-    IO.puts("Convergence reached at #{inspect time}ms, start time #{inspect startTime}ms, end time #{inspect endTime}")
+      IO.puts("Convergence ratio S/W: #{inspect (Enum.at(prevstate,2)/Enum.at(prevstate,3))}")
     System.halt(1)
   end
 
   def updateNeighbours(id,list) do
     GenServer.cast(id,{:neighboursList, list})
-  end
-
-  def getNeighbours(id) do
-    IO.inspect GenServer.call(id,{:getState})
   end
 
   def getState(pid) do
@@ -100,12 +96,20 @@ defmodule SERVER do
       :ets.update_counter(:table,"killedProcess",{2,1})
     end
     [{_,tcount}]=:ets.lookup(:table,"killedProcess")
-    if(tcount >= trunc(numNodes*0.85)) do   #ratio less for imp2D from 50-70 and line of about 90-100
-      #Enum.map(1..numNodes, fn(x) ->
-        #pname = (String.to_atom("Child_"<>Integer.to_string(x)))
-        #state = getState(pname)
-        #IO.puts("#{inspect Enum.at(state,0)} #{inspect (Enum.at(state,2)/Enum.at(state,3))}") # pname
-      #end)
+    [{_,table1}]=:ets.lookup(:table,"Algorithm")
+    percent = if(table1 == "push-sum") do
+      [{_,name}]=:ets.lookup(:table,"Topology")
+      case name do
+        "imp2D" -> 0.55
+        "line" -> 0.9
+        "rand2D" -> 0.75
+        _ -> 0.85
+      end
+    else
+      0.9
+    end
+    #IO.puts percent
+    if(tcount >= trunc(numNodes*percent)) do   #ratio less for imp2D from 50-70 and line of about 90-100
       GenServer.call(:Child_0,{:terminate,startTime,tcount,numNodes,state})
     end
   end

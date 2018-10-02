@@ -7,7 +7,7 @@ defmodule MAIN do
     _ -> numNodes
   end
   SSUPERVISOR.start_link(nodes)
-  TOPOLOGIES.buildTopology(topology,nodes)
+  TOPOLOGIES.buildTopology(topology,nodes,algorithm)
   case algorithm do
     "gossip" -> SERVER.startGossip("GossipMessage",System.os_time(:millisecond),nodes)
     "push-sum" ->  SERVER.startPushSum(nodes,System.monotonic_time(:millisecond))
