@@ -54,7 +54,9 @@ defmodule SERVER do
   def handle_call({:getState},_from,state) do
     {:reply,state,state}
   end
-
+  def handle_call({:neighboursList},_from,state) do
+    {:reply,Enum.at(state,1),state}
+  end
   def handle_call({:converge,startTime},_from,_) do
     endTime = System.os_time(:millisecond)
     time = endTime-startTime
@@ -68,11 +70,6 @@ defmodule SERVER do
     IO.puts("Convergence reached at #{inspect time}ms")
     :ets.insert(:table,{"killedProcess",0})
     :ets.insert(:table,{"ProcessList",[]})
-    #Enum.map(1..numNodes, fn(x) ->
-     # pname = (String.to_atom("Child_"<>Integer.to_string(x)))
-     # state = getState(pname)
-     # IO.puts("#{inspect Enum.at(state,0)} #{inspect (Enum.at(state,2)/Enum.at(state,3))}") # pname
-    #end)
       IO.puts("Nodes converged: #{inspect tcount}")
       IO.puts("Total nodes: #{inspect numNodes}")
       IO.puts("Convergence ratio S/W: #{inspect (Enum.at(prevstate,2)/Enum.at(prevstate,3))}")
@@ -81,6 +78,10 @@ defmodule SERVER do
 
   def updateNeighbours(id,list) do
     GenServer.cast(id,{:neighboursList, list})
+  end
+
+  def getNeighbours(id) do
+    GenServer.call(id,{:neighboursList})
   end
 
   def getState(pid) do
@@ -119,13 +120,13 @@ defmodule SERVER do
   def startGossip(msg,startTime,numNodes) do
     pname=String.to_atom("Child_"<>Integer.to_string(:rand.uniform(numNodes)))
     GenServer.cast(pname,{:accept,msg,numNodes,startTime})
-    infiniteloop(startTime)
+    waitfunc(startTime)
   end
 
-  def infiniteloop(startTime) do
+  def waitfunc(startTime) do
     endTime = System.os_time(:millisecond)
     time = endTime - startTime
-    if(time<=50000) do infiniteloop(startTime)
+    if(time<=50000) do waitfunc(startTime)
     else
       IO.puts "Convergence could not be reached within 50000ms"
       System.halt(1)
@@ -139,6 +140,7 @@ defmodule SERVER do
       :ets.update_counter(:table,"killedProcess",{2,1})
     end
     [{_,tcount}]=:ets.lookup(:table,"killedProcess")
+    #IO.inspect tcount
       if(tcount >= trunc(numNodes*0.9)) do
         GenServer.call(:Child_0,{:converge,startTime})
       end
@@ -179,7 +181,7 @@ defmodule SERVER do
 
     if(count != -1) do
       ncount = calculateCounter(diff,numNodes,count,startTime,state,pname)
-      GenServer.cast(pname,{:updatePushSum,newS/2,newW/2,ncount})
+        GenServer.cast(pname,{:updatePushSum,newS/2,newW/2,ncount})
     end
       if(neighNode != :false) do
         val1 = if(count != -1) do newS/2 else oldS/2 end

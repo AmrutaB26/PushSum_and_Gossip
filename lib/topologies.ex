@@ -17,9 +17,13 @@ defmodule TOPOLOGIES do
         :ets.insert(table,{"Topology","torus"})
         "line" -> buildLineTopology(numNodes)
         :ets.insert(table,{"Topology","line"})
-        "imp2D" -> buildImp2DTopology(numNodes)
+        "imp2D" ->
+          if(algorithm == "push-sum") do
+          buildImp2DTopologyPush(numNodes)
+          else
+            buildImp2DTopology(numNodes)
+          end
         :ets.insert(table,{"Topology","imp2D"})
-
         _ -> IO.puts "Invalid value of topology"
       end
       #IO.inspect Enum.map(1..numNodes, fn(x) -> SERVER.getNeighbours(String.to_atom("Child_"<>Integer.to_string(x))) end)
@@ -131,6 +135,19 @@ defmodule TOPOLOGIES do
       get2DNeighbours(map)
     end
 
+    def buildImp2DTopologyPush(numNodes) do
+      Enum.each(1..numNodes, fn(x) ->
+        neighbour = cond do
+          x==1 ->
+            ["Child_"<>Integer.to_string(x+1),"Child_"<>Integer.to_string(Enum.random(x+2..x+10))]
+          x==numNodes ->
+            ["Child_"<>Integer.to_string(x-1),"Child_"<>Integer.to_string(Enum.random(x-10..x-2))]
+          true->
+            ["Child_"<>Integer.to_string(x-1) , "Child_"<>Integer.to_string(x+1),"Child_"<>Integer.to_string(round(:math.ceil(numNodes/2)))]
+          end
+          SERVER.updateNeighbours(String.to_atom("Child_"<>Integer.to_string(x)), neighbour)
+      end)
+    end
     defp get2DNeighbours(list) do #TODO list of empty neighbours
       Map.keys(list)
       |> Enum.each(fn(x)->
