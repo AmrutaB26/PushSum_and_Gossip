@@ -34,6 +34,27 @@ defmodule SERVER do
     {:reply,state,state}
   end
 
+  def handle_cast({:accept,msg,numNodes,startTime},state) do
+    if(Enum.at(state,0)>=10) do
+      stopExecution(numNodes,startTime,self())
+    else
+     if(Enum.at(state,0)==0) do
+        GenServer.cast(self(),{:neigh,msg,startTime,numNodes})
+     end
+    end
+    [count,list,s,w,_]=state
+    {:noreply,[count+1,list,s,w,msg],state}
+  end
+
+  def handle_cast({:neigh,msg,startTime,numNodes},state) do
+    neighNode=getRandomAliveNeighbour((Enum.at(state,1)))
+    if(neighNode != :false) do
+      spawn fn -> GenServer.cast(neighNode,{:accept,msg,startTime,numNodes}) end
+      GenServer.cast(self(),{:neigh,msg,startTime,numNodes})
+    end
+      {:noreply,state}
+  end
+
   def handle_call({:terminate,startTime,tcount,numNodes,prevstate},_from,_) do
     endTime = System.monotonic_time(:millisecond)
     time = endTime-startTime
@@ -41,13 +62,20 @@ defmodule SERVER do
     :ets.insert(:table,{"killedProcess",0})
     :ets.insert(:table,{"ProcessList",[]})
     #Enum.map(1..numNodes, fn(x) ->
-      #pname = (String.to_atom("Child_"<>Integer.to_string(x)))
-      #state = getState(pname)
-      #IO.puts("#{inspect Enum.at(state,0)} #{inspect (Enum.at(state,2)/Enum.at(state,3))}") # pname
+     # pname = (String.to_atom("Child_"<>Integer.to_string(x)))
+     # state = getState(pname)
+     # IO.puts("#{inspect Enum.at(state,0)} #{inspect (Enum.at(state,2)/Enum.at(state,3))}") # pname
     #end)
       IO.puts("Nodes converged: #{inspect tcount}")
       IO.puts("Total nodes: #{inspect numNodes}")
       IO.puts("Convergence ratio #{inspect (Enum.at(prevstate,2)/Enum.at(prevstate,3))}")
+    System.halt(1)
+  end
+
+  def handle_call({:converge,startTime},_from,_) do
+    endTime = System.os_time(:millisecond)
+    time = endTime-startTime
+    IO.puts("Convergence reached at #{inspect time}ms, start time #{inspect startTime}ms, end time #{inspect endTime}")
     System.halt(1)
   end
 
@@ -63,7 +91,7 @@ defmodule SERVER do
     GenServer.call(pid,{:getState})
   end
 
-  ## --------------- CLient API ---------------- ##
+  ## ----------------------- CLient API --------------------- ##
 
   def stopExecution(numNodes,startTime,state,pid) do
     [{_,list}]=:ets.lookup(:table,"ProcessList")
@@ -72,58 +100,60 @@ defmodule SERVER do
       :ets.update_counter(:table,"killedProcess",{2,1})
     end
     [{_,tcount}]=:ets.lookup(:table,"killedProcess")
-    if(tcount >= trunc(numNodes*1)) do
+    if(tcount >= trunc(numNodes*0.85)) do   #ratio less for imp2D from 50-70 and line of about 90-100
+      #Enum.map(1..numNodes, fn(x) ->
+        #pname = (String.to_atom("Child_"<>Integer.to_string(x)))
+        #state = getState(pname)
+        #IO.puts("#{inspect Enum.at(state,0)} #{inspect (Enum.at(state,2)/Enum.at(state,3))}") # pname
+      #end)
       GenServer.call(:Child_0,{:terminate,startTime,tcount,numNodes,state})
     end
   end
 
-  def startGossip(msg,startTime,parent,numNodes) do
-    pname=String.to_atom("Child_"<>Integer.to_string(Enum.random(1..numNodes)))
-    IO.puts("Gossip started with #{inspect pname}")
-    initiateGossip(pname,msg,startTime,parent,numNodes)
+  ## ------------------------ GOSSIP ------------------- ##
+
+  def startGossip(msg,startTime,numNodes) do
+    pname=String.to_atom("Child_"<>Integer.to_string(:rand.uniform(numNodes)))
+    GenServer.cast(pname,{:accept,msg,numNodes,startTime})
+    infiniteloop(startTime)
   end
 
-  def initiateGossip(pid,msg,startTime,parent,numNodes) do
-    #IO.puts("State updated of #{inspect pid}")
-    GenServer.cast(pid,{:updateStateCount,msg})
-    spawnNeighbours(msg,pid,parent,numNodes,startTime)
-  end
-
-  def spawnNeighbours(msg,pid,parent,numNodes,startTime) do
-    state=getState(pid)
-    if(Enum.at(state,0)>=10) do
-      stopExecution(numNodes,startTime,state,pid)
+  def infiniteloop(startTime) do
+    endTime = System.os_time(:millisecond)
+    time = endTime - startTime
+    if(time<=50000) do infiniteloop(startTime)
     else
-      neighNode=getRandomAliveNeighbour((Enum.at(state,1)))
-      if(neighNode != :false) do
-        IO.puts("From #{inspect pid} to #{inspect neighNode}")
-        spawn fn -> initiateGossip(neighNode,msg,startTime,parent,numNodes) end
-        #spawnNeighbours(msg,pid,parent,numNodes,startTime)
-      else
-        stopExecution(numNodes,startTime,state,pid)
-      end
+      IO.puts "Convergence could not be reached within 50000ms"
+      System.halt(1)
     end
-     # spawnNeighbours(msg,pid,parent,numNodes,startTime)
+  end
+
+  def stopExecution(numNodes,startTime,pid) do
+    [{_,list}]=:ets.lookup(:table,"ProcessList")
+    if(Enum.any?(list,fn x-> x==pid end) == :false) do
+      :ets.insert(:table,{"ProcessList",[pid]++list})
+      :ets.update_counter(:table,"killedProcess",{2,1})
+    end
+    [{_,tcount}]=:ets.lookup(:table,"killedProcess")
+      if(tcount >= trunc(numNodes*0.9)) do
+        GenServer.call(:Child_0,{:converge,startTime})
+      end
   end
 
   def getRandomAliveNeighbour(list) do
     if(Enum.empty?(list)) do
-      #IO.puts "reacheddd fallsee"
       :false
     else
       neighbourNode=Enum.random(list)
-      #IO.puts "amr"
-      #IO.inspect neighbourNode
       pid = String.to_atom(neighbourNode)
-      if(Enum.at(getState(pid),0)>=10) do
+      [{_,nlist}]=:ets.lookup(:table,"ProcessList")
+      if(Enum.any?(nlist,fn x-> x==pid end) != :false) do
         getRandomAliveNeighbour(List.delete(list,neighbourNode))
-      else
-        String.to_atom(neighbourNode)
-      end
+      else String.to_atom(neighbourNode) end
     end
   end
 
-  # ------------------------------- PUSH SUM -------------------------------------- #
+  ## ------------------------------- PUSH SUM -------------------------------------- ##
 
   def startPushSum(numNodes,startTime) do
     IO.puts "Push-sum started for #{numNodes} nodes"

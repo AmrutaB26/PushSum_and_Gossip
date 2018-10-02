@@ -20,7 +20,7 @@ defmodule TOPOLOGIES do
     # ------------------------------ Torus ------------------------------ #
 
     def buildTorusTopology(numNodes) do
-      sqroot = round(Float.floor(:math.sqrt(numNodes))) #handle for non squarable
+      sqroot = round(Float.ceil(:math.sqrt(numNodes))) #handle for non squarable
       Enum.map(1..numNodes, fn x->
         #rightNode = "Child_" <> Integer.to_string(round(rem(x,sqroot) + (sqroot * Float.ceil((x/sqroot)-1)) + 1))
         #topNode = "Child_"<> Integer.to_string(round(numNodes + rem(x-1,sqroot) +1 - (sqroot * (Float.ceil(x/sqroot)))))
@@ -68,14 +68,15 @@ defmodule TOPOLOGIES do
       # --------------------------- Imperfect 2D ------------------------------ #
 
     def buildImp2DTopology(numNodes) do
+      list = Enum.map(1..numNodes, fn x-> x end)
       Enum.each(1..numNodes, fn(x) ->
         neighbour = cond do
           x==1 ->
-            ["Child_"<>Integer.to_string(x+1),"Child_"<>Integer.to_string(Enum.random(1..numNodes))]
+            ["Child_"<>Integer.to_string(x+1),"Child_"<>Integer.to_string(Enum.random(List.delete(list,x) |> List.delete(x+1)))]
           x==numNodes ->
-            ["Child_"<>Integer.to_string(x-1),"Child_"<>Integer.to_string(Enum.random(1..numNodes))]
+            ["Child_"<>Integer.to_string(x-1),"Child_"<>Integer.to_string(Enum.random(List.delete(list,x) |> List.delete(x-1)))]
           true->
-            [("Child_"<>Integer.to_string(x-1)) , ("Child_"<>Integer.to_string(x+1)),"Child_"<>Integer.to_string(Enum.random(1..numNodes))]
+            [("Child_"<>Integer.to_string(x-1)) , ("Child_"<>Integer.to_string(x+1)),"Child_"<>Integer.to_string(Enum.random(List.delete(list,x)|> List.delete(x-1)|> List.delete(x+1)))]
           end
           SERVER.updateNeighbours(String.to_atom("Child_"<>Integer.to_string(x)), neighbour)
       end)
@@ -84,7 +85,7 @@ defmodule TOPOLOGIES do
       # ------------------------------ 3D ------------------------------ #
 
     def build3DTopology(numNodes) do
-      cubeRoot = round(Float.floor(:math.pow(numNodes,(1/3))))
+      cubeRoot = round(Float.ceil(:math.pow(numNodes,(1/3))))
       Enum.each(1..numNodes, fn x->
         posX = if(x+1 <= numNodes && rem(x,cubeRoot) != 0 ) do x+1 end
         posY = if(rem(x,cubeRoot*cubeRoot) != 0 && cubeRoot*cubeRoot - cubeRoot >= rem(x,(cubeRoot*cubeRoot))) do x+ cubeRoot end
